@@ -1,0 +1,892 @@
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+local Window = Fluent:CreateWindow({
+    Title = "IG: DRAGON_12_6",
+    SubTitle = "รับทำสคริปทุกรูปแบบ (MM2 Ultimate Edition)",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local Tabs = {
+    GeneralFunc = Window:AddTab({ Title = "♣เนม555♣", Icon = "zap" }),
+    Main = Window:AddTab({ Title = "หน้าหลัก", Icon = "" }),
+    MM2Name = Window:AddTab({ Title = "MM2น้องเนมค้าบ", Icon = "shield" }),
+    Settings = Window:AddTab({ Title = "ตั้งค่า", Icon = "settings" })
+}
+
+local Options = Fluent.Options
+
+local Config = {
+    InfiniteJump = false,
+    NoWall = false,
+    WalkSpeed = 16,
+    CopyGamepass = false,
+    
+    -- MM2 Custom Configs
+    ShootAirToMurder = false,
+    AutoPullGunOnSheriffDeath = false,
+    AntiExploitKick = true,
+    KickPlayerName = "",
+    FOVValue = 70,
+    AimFOVRadius = 150,
+    ShowAimFOV = false,
+    MM2ESP = false,
+    
+    ESPTextSize = 14,
+    
+    KillerAutoSlash = false,
+    KillerSlashRadius = 25,
+    ShowKillerRadius = false,
+    
+    AttackRadius = 15,
+    ShowRadiusCircle = false,
+    FlyToMurder = false,
+    FlySpeed = 3,
+    
+    FloatPullButtonEnabled = false
+}
+
+-- สร้างปุ่มเปิด/ปิด UI หลัก ชื่อ "♣เนม555♣"
+local ScreenGui = Instance.new("ScreenGui", CoreGui)
+ScreenGui.Name = "NameUIMappingCustom"
+
+local ToggleUIPanel = Instance.new("TextButton", ScreenGui)
+ToggleUIPanel.Size = UDim2.new(0, 110, 0, 38)
+ToggleUIPanel.Position = UDim2.new(0.02, 0, 0.4, 0)
+ToggleUIPanel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ToggleUIPanel.Text = "♣เนม555♣"
+ToggleUIPanel.TextColor3 = Color3.fromRGB(0, 0, 0)
+ToggleUIPanel.TextSize = 16
+ToggleUIPanel.Font = Enum.Font.SourceSansBold
+ToggleUIPanel.Active = true
+ToggleUIPanel.Draggable = true
+
+local uiCorner = Instance.new("UICorner", ToggleUIPanel)
+uiCorner.CornerRadius = UDim.new(0, 8)
+
+local uiStroke = Instance.new("UIStroke", ToggleUIPanel)
+uiStroke.Thickness = 2.5
+uiStroke.Color = Color3.fromRGB(255, 0, 0)
+
+local uiVisible = true
+ToggleUIPanel.MouseButton1Click:Connect(function()
+    uiVisible = not uiVisible
+    Window.Root.Visible = uiVisible
+end)
+
+-- สร้างปุ่มลอยเสริม "ดึงฆาตกรยิง"
+local FloatPullButton = Instance.new("TextButton", ScreenGui)
+FloatPullButton.Size = UDim2.new(0, 115, 0, 34)
+FloatPullButton.Position = UDim2.new(0.02, 0, 0.52, 0)
+FloatPullButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+FloatPullButton.Text = "ดึงฆาตกรยิง"
+FloatPullButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+FloatPullButton.TextSize = 14
+FloatPullButton.Font = Enum.Font.GothamBold
+FloatPullButton.Active = true
+FloatPullButton.Draggable = true
+FloatPullButton.Visible = false
+
+local floatCorner = Instance.new("UICorner", FloatPullButton)
+floatCorner.CornerRadius = UDim.new(0, 6)
+
+local floatStroke = Instance.new("UIStroke", FloatPullButton)
+floatStroke.Thickness = 2
+floatStroke.Color = Color3.fromRGB(255, 255, 255)
+
+-- ฟังก์ชันค้นหาบทบาท MM2 (รองรับทุกเคส Item/Backpack/Character)
+local function GetMM2Roles()
+    local murderer, sheriff
+    for _, p in pairs(Players:GetPlayers()) do
+        if p.Character then
+            local bp = p:FindFirstChildOfClass("Backpack")
+            local function checkItem(item)
+                if item and item:IsA("Tool") then
+                    local name = string.lower(item.Name)
+                    if name:find("knife") or name:find("blade") or name:find("dagger") then
+                        murderer = p
+                    elseif name:find("gun") or name:find("revolver") or name:find("sheriff") then
+                        sheriff = p
+                    end
+                end
+            end
+
+            for _, item in pairs(p.Character:GetChildren()) do
+                checkItem(item)
+            end
+            if bp then
+                for _, item in pairs(bp:GetChildren()) do
+                    checkItem(item)
+                end
+            end
+        end
+    end
+    return murderer, sheriff
+end
+
+-- ฟังก์ชันดึงหัวฆาตกรมาไว้ตรงหน้าปืน ล็อกหัว 100% บังคับกล้อง แจ้งเตือนและยิงทันที
+local function PullMurdererToAimAndShoot()
+    local murderer, _ = GetMM2Roles()
+    if murderer and murderer.Character and LocalPlayer.Character then
+        local mHrp = murderer.Character:FindFirstChild("HumanoidRootPart") or murderer.Character:FindFirstChild("Head")
+        local mHead = murderer.Character:FindFirstChild("Head")
+        local myHrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        
+        if mHrp and mHead and myHrp then
+            -- ดึงหัว/ตัวฆาตกรมาไว้ตรงหน้าตัวเราพอดีเป๊ะ (ระยะประชิด 3.5 หน่วย) ทำให้ฆาตกรู้ตัวทันทีว่าโดนดึงกลางอากาศ
+            mHrp.CFrame = myHrp.CFrame * CFrame.new(0, 0, -3.5)
+            
+            -- บังคับล็อกกล้องและหันตัวละครล็อกหัว 100%
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, mHead.Position)
+            myHrp.CFrame = CFrame.new(myHrp.Position, Vector3.new(mHead.Position.X, myHrp.Position.Y, mHead.Position.Z))
+            
+            -- สั่งหยิบปืนและยิงอัตโนมัติ 100% ทันที
+            local gunTool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+            if not gunTool and LocalPlayer:FindFirstChildOfClass("Backpack") then
+                for _, item in pairs(LocalPlayer.Backpack:GetChildren()) do
+                    if item:IsA("Tool") and (string.lower(item.Name):find("gun") or string.lower(item.Name):find("revolver")) then
+                        LocalPlayer.Character.Humanoid:EquipTool(item)
+                        gunTool = item
+                        break
+                    end
+                end
+            end
+            
+            pcall(function()
+                if gunTool then
+                    gunTool:Activate()
+                end
+            end)
+            
+            Fluent:Notify({
+                Title = "ดึงฆาตกรกลางอากาศ & ล็อกหัว 100%!",
+                Content = "ดึงตัว " .. murderer.Name .. " มาตรงหน้าและลั่นไกยิงหัวสำเร็จ!",
+                Duration = 2.5
+            })
+        end
+    else
+        Fluent:Notify({
+            Title = "ไม่พบฆาตกร",
+            Content = "ยังไม่พบตัวฆาตกรในรอบนี้หรือตัวละครไม่พร้อม",
+            Duration = 2
+        })
+    end
+end
+
+FloatPullButton.MouseButton1Click:Connect(function()
+    PullMurdererToAimAndShoot()
+end)
+
+-- 1. ฟังก์ชันกระโดดไม่จำกัด
+UserInputService.JumpRequest:Connect(function()
+    if Config.InfiniteJump and LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end)
+
+-- 2. ฟังก์ชันเดินทะลุกำแพง 100%
+RunService.Stepped:Connect(function()
+    if LocalPlayer.Character and Config.NoWall then
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    if part.Name ~= "HumanoidRootPart" and part.Position.Y > hrp.Position.Y - 2.8 then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- 3. ฟังก์ชันเดินเร็ว
+RunService.RenderStepped:Connect(function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local humanoid = LocalPlayer.Character.Humanoid
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        
+        if Config.WalkSpeed > 16 then
+            humanoid.WalkSpeed = 16
+            if humanoid.MoveDirection.Magnitude > 0 then
+                hrp.CFrame = hrp.CFrame + (humanoid.MoveDirection * (Config.WalkSpeed / 60))
+            end
+        else
+            humanoid.WalkSpeed = Config.WalkSpeed
+        end
+    end
+end)
+
+-- ป้องกันโดนเตะออกจากเซิร์ฟเวอร์
+local OldNameCall
+OldNameCall = hookmetamethod(game, "__namecall", function(self, ...)
+    local method = getnamecallmethod()
+    if Config.AntiExploitKick and (tostring(method) == "Kick" or tostring(method) == "kick") then
+        if self == LocalPlayer then
+            return
+        end
+    end
+    return OldNameCall(self, ...)
+end)
+
+-- ระบบดีดผู้เล่นขั้นเด็ดขาด 100% (ทะลุกำแพง ล็อกเป้าหมายกระเด็นหลุดห้องชัวร์ และกลับจุดเดิม 100%)
+local function FlingAndKickPlayer(targetPlayer)
+    if not targetPlayer or not targetPlayer.Character then return end
+    local targetHrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart") or targetPlayer.Character:FindFirstChild("Head")
+    local myChar = LocalPlayer.Character
+    if not targetHrp or not myChar then return end
+    local myHrp = myChar:FindFirstChild("HumanoidRootPart")
+    local myHumanoid = myChar:FindFirstChildOfClass("Humanoid")
+    if not myHrp or not myHumanoid then return end
+
+    -- บันทึกตำแหน่งเดิมแบบละเอียด 100%
+    local originalCFrame = myHrp.CFrame
+
+    -- ปิดการชนทุกชิ้นส่วนเพื่อให้พุ่งทะลุสิ่งกีดขวางได้ 100%
+    myHumanoid.PlatformStand = true
+    for _, part in pairs(myChar:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
+
+    local startTime = tick()
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        if targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local tHrp = targetPlayer.Character.HumanoidRootPart
+            -- สร้างแรงเหวี่ยงและความเร็วมหาศาล ทะลุกำแพงและแมพ 100%
+            local randomOffset = CFrame.Angles(math.random(-500, 500), math.random(-500, 500), math.random(-500, 500))
+            myHrp.CFrame = tHrp.CFrame * randomOffset
+            myHrp.Velocity = Vector3.new(999999, 999999, 999999)
+            myHrp.RotVelocity = Vector3.new(999999, 999999, 999999)
+        end
+        
+        -- ใช้เวลาพุ่งกระแทก 0.45 วินาที เพื่อให้มั่นใจว่าเป้าหมายกระเด็นหลุดแมพแน่ๆ
+        if tick() - startTime > 0.45 then
+            if connection then
+                connection:Disconnect()
+            end
+            
+            -- คืนค่าสถานะตัวละคร กลับสู่ตำแหน่งเดิม 100%
+            myHumanoid.PlatformStand = false
+            myHrp.Velocity = Vector3.new(0, 0, 0)
+            myHrp.RotVelocity = Vector3.new(0, 0, 0)
+            myHrp.CFrame = originalCFrame
+
+            -- สั่งเตะผู้เล่นออกจากเซิร์ฟเวอร์ทันที
+            pcall(function()
+                if targetPlayer.Character and targetPlayer.Character:FindFirstChild("Humanoid") then
+                    targetPlayer.Character.Humanoid.Health = 0
+                end
+                targetPlayer:Kick("คุณถูกดีดกระเด็นทะลุออกนอกห้องโดยระบบของ DRAGON_12_6")
+            end)
+
+            Fluent:Notify({
+                Title = "ดีดผู้เล่นสำเร็จ 100%",
+                Content = "พุ่งกระแทกดีด " .. targetPlayer.Name .. " หลุดออกนอกห้อง และกลับจุดเดิมเรียบร้อย!",
+                Duration = 3
+            })
+        end
+    end)
+end
+
+-- ฟังก์ชันดีดผู้เล่นตามบทบาท
+local function KickSpecificRole(roleType)
+    local murderer, sheriff = GetMM2Roles()
+    local found = false
+    
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            local match = false
+            if roleType == "Murderer" and p == murderer then match = true end
+            if roleType == "Sheriff" and p == sheriff then match = true end
+            if roleType == "Innocent" and p ~= murderer and p ~= sheriff then match = true end
+            
+            if match then
+                found = true
+                FlingAndKickPlayer(p)
+            end
+        end
+    end
+    
+    if not found then
+        Fluent:Notify({
+            Title = "ไม่พบเป้าหมาย",
+            Content = "ไม่พบผู้เล่นในบทบาทนี้ขณะนี้",
+            Duration = 2
+        })
+    end
+end
+
+-- ฟังก์ชันดีดผู้เล่นตามชื่อ
+local function KickPlayerByName(targetName)
+    if targetName == "" then
+        Fluent:Notify({
+            Title = "กรุณากรอกชื่อ",
+            Content = "โปรดพิมพ์ชื่อผู้เล่นที่ต้องการดีดออกก่อนกด",
+            Duration = 2
+        })
+        return
+    end
+    
+    local found = false
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            if string.find(string.lower(p.Name), string.lower(targetName)) or string.find(string.lower(p.DisplayName), string.lower(targetName)) then
+                found = true
+                FlingAndKickPlayer(p)
+            end
+        end
+    end
+    
+    if not found then
+        Fluent:Notify({
+            Title = "ไม่พบชื่อผู้เล่น",
+            Content = "ไม่พบผู้เล่นที่ตรงกับชื่อที่คุณกรอก",
+            Duration = 2
+        })
+    end
+end
+
+-- ระบบ FOV กล้อง
+RunService.RenderStepped:Connect(function()
+    if Camera then
+        Camera.FieldOfView = Config.FOVValue
+    end
+end)
+
+-- วงกลม FOV ตรงกลางจอ
+local AimFOVDrawing = Drawing.new("Circle")
+AimFOVDrawing.Thickness = 1.5
+AimFOVDrawing.Color = Color3.fromRGB(0, 255, 255)
+AimFOVDrawing.Filled = false
+AimFOVDrawing.Visible = false
+
+RunService.RenderStepped:Connect(function()
+    if Config.ShowAimFOV then
+        AimFOVDrawing.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+        AimFOVDrawing.Radius = Config.AimFOVRadius
+        AimFOVDrawing.Visible = true
+    else
+        AimFOVDrawing.Visible = false
+    end
+end)
+
+-- ออโต้ดึงปืนเข้ามาในตัวตอนนายอำเภอเสียชีวิต
+RunService.Stepped:Connect(function()
+    if Config.AutoPullGunOnSheriffDeath then
+        for _, obj in pairs(Workspace:GetDescendants()) do
+            if obj:IsA("Tool") then
+                local name = string.lower(obj.Name)
+                if name:find("gun") or name:find("revolver") then
+                    if obj:FindFirstChild("Handle") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        obj.Handle.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ระบบคลิกยิงอากาศ ดึงฆาตกรมาล็อกหัว 100% ทันทีเมื่อคลิกซ้าย
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton1 then
+        local murderer, _ = GetMM2Roles()
+        
+        if Config.ShootAirToMurder and murderer and murderer.Character then
+            local mHrp = murderer.Character:FindFirstChild("HumanoidRootPart") or murderer.Character:FindFirstChild("Head")
+            local mHead = murderer.Character:FindFirstChild("Head")
+            if mHrp and mHead then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(mHrp.Position)
+                if onScreen then
+                    local centerScreen = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+                    local distToCenter = (Vector2.new(screenPos.X, screenPos.Y) - centerScreen).Magnitude
+                    
+                    if distToCenter <= Config.AimFOVRadius then
+                        local myHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if myHrp then
+                            -- ดึงฆาตกรมาใกล้หน้าทันทีเพื่อให้รู้ตัวว่าโดนดึงกลางอากาศ
+                            mHrp.CFrame = myHrp.CFrame * CFrame.new(0, 0, -3.5)
+                            Camera.CFrame = CFrame.new(Camera.CFrame.Position, mHead.Position)
+                            myHrp.CFrame = CFrame.new(myHrp.Position, Vector3.new(mHead.Position.X, myHrp.Position.Y, mHead.Position.Z))
+                            
+                            local gunTool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                            if not gunTool and LocalPlayer:FindFirstChildOfClass("Backpack") then
+                                for _, item in pairs(LocalPlayer.Backpack:GetChildren()) do
+                                    if item:IsA("Tool") and (string.lower(item.Name):find("gun") or string.lower(item.Name):find("revolver")) then
+                                        LocalPlayer.Character.Humanoid:EquipTool(item)
+                                        gunTool = item
+                                        break
+                                    end
+                                end
+                            end
+                            
+                            pcall(function()
+                                if gunTool then
+                                    gunTool:Activate()
+                                end
+                            end)
+                        end
+                    end
+                end
+            end
+        end
+
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    local targetPos = p.Character.HumanoidRootPart.Position
+                    if (myPos - targetPos).Magnitude <= Config.AttackRadius then
+                        pcall(function()
+                            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+                            if hum then
+                                hum.Health = 0
+                            end
+                        end)
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ฟังก์ชันฆาตกรเปิดออโต้ฟันใต้เท้า
+RunService.RenderStepped:Connect(function()
+    local murderer, _ = GetMM2Roles()
+    if Config.KillerAutoSlash and murderer == LocalPlayer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local myHrpPos = LocalPlayer.Character.HumanoidRootPart.Position
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                local targetPos = p.Character.HumanoidRootPart.Position
+                if (myHrpPos - targetPos).Magnitude <= Config.KillerSlashRadius then
+                    pcall(function()
+                        local hum = p.Character:FindFirstChildOfClass("Humanoid")
+                        if hum then
+                            hum.Health = 0
+                        end
+                    end)
+                end
+            end
+        end
+    end
+end)
+
+-- ฟังก์ชันบินไปหาฆาตกรอย่างสมูท
+RunService.RenderStepped:Connect(function()
+    if Config.FlyToMurder and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local murderer, _ = GetMM2Roles()
+        if murderer and murderer.Character and murderer.Character:FindFirstChild("Head") then
+            local hrp = LocalPlayer.Character.HumanoidRootPart
+            local targetHead = murderer.Character.Head.Position + Vector3.new(0, 3, 0)
+            local speedFactor = math.clamp(Config.FlySpeed, 1, 100) * 0.05
+            hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(targetHead), speedFactor)
+        end
+    end
+end)
+
+-- ESP Drawing
+local MM2ESPCache = {}
+
+local KillerRadiusDrawing = Drawing.new("Circle")
+KillerRadiusDrawing.Thickness = 3
+KillerRadiusDrawing.Color = Color3.fromRGB(255, 0, 0)
+KillerRadiusDrawing.Filled = false
+KillerRadiusDrawing.Visible = false
+
+local RadiusDrawing = Drawing.new("Circle")
+RadiusDrawing.Thickness = 3
+RadiusDrawing.Color = Color3.fromRGB(255, 255, 0)
+RadiusDrawing.Filled = false
+RadiusDrawing.Visible = false
+
+RunService.RenderStepped:Connect(function()
+    if Config.ShowKillerRadius and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local murderer, _ = GetMM2Roles()
+        if murderer == LocalPlayer then
+            local hrp = LocalPlayer.Character.HumanoidRootPart
+            local footPosition = hrp.Position - Vector3.new(0, 3, 0)
+            local pos, onScreen = Camera:WorldToViewportPoint(footPosition)
+            
+            local edgePosition = footPosition + Vector3.new(Config.KillerSlashRadius, 0, 0)
+            local edgePosScreen, onScreenEdge = Camera:WorldToViewportPoint(edgePosition)
+            
+            if onScreen and onScreenEdge then
+                local radiusPixels = (Vector2.new(pos.X, pos.Y) - Vector2.new(edgePosScreen.X, edgePosScreen.Y)).Magnitude
+                KillerRadiusDrawing.Position = Vector2.new(pos.X, pos.Y)
+                KillerRadiusDrawing.Radius = radiusPixels
+                KillerRadiusDrawing.Visible = true
+            else
+                KillerRadiusDrawing.Visible = false
+            end
+        else
+            KillerRadiusDrawing.Visible = false
+        end
+    else
+        KillerRadiusDrawing.Visible = false
+    end
+
+    if Config.ShowRadiusCircle and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        local footPosition = hrp.Position - Vector3.new(0, 3, 0)
+        local pos, onScreen = Camera:WorldToViewportPoint(footPosition)
+        
+        local edgePosition = footPosition + Vector3.new(Config.AttackRadius, 0, 0)
+        local edgePosScreen, onScreenEdge = Camera:WorldToViewportPoint(edgePosition)
+        
+        if onScreen and onScreenEdge then
+            local radiusPixels = (Vector2.new(pos.X, pos.Y) - Vector2.new(edgePosScreen.X, edgePosScreen.Y)).Magnitude
+            RadiusDrawing.Position = Vector2.new(pos.X, pos.Y)
+            RadiusDrawing.Radius = radiusPixels
+            RadiusDrawing.Visible = true
+        else
+            RadiusDrawing.Visible = false
+        end
+    else
+        RadiusDrawing.Visible = false
+    end
+
+    local murderer, sheriff = GetMM2Roles()
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            if not MM2ESPCache[p] then
+                MM2ESPCache[p] = {
+                    Box = Drawing.new("Square"),
+                    Text = Drawing.new("Text")
+                }
+                MM2ESPCache[p].Box.Thickness = 2
+                MM2ESPCache[p].Box.Filled = true
+                MM2ESPCache[p].Text.Center = true
+                MM2ESPCache[p].Text.Outline = true
+                MM2ESPCache[p].Text.Font = Drawing.Fonts.UI
+            end
+
+            local esp = MM2ESPCache[p]
+            esp.Text.Size = Config.ESPTextSize
+            
+            local char = p.Character
+            if Config.MM2ESP and char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Head") then
+                local hrp = char.HumanoidRootPart
+                local vector, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+
+                if onScreen then
+                    esp.Box.Visible = true
+                    esp.Text.Visible = true
+
+                    if p == murderer then
+                        esp.Box.Color = Color3.fromRGB(255, 0, 0)
+                        esp.Box.Transparency = 0.9
+                        esp.Text.Text = "ไอ้เลว"
+                        esp.Text.Color = Color3.fromRGB(255, 0, 0)
+                    elseif p == sheriff then
+                        esp.Box.Color = Color3.fromRGB(0, 0, 139)
+                        esp.Box.Transparency = 0.5
+                        esp.Text.Text = "นายอำเภอ"
+                        esp.Text.Color = Color3.fromRGB(0, 150, 255)
+                    else
+                        esp.Box.Color = Color3.fromRGB(255, 255, 255)
+                        esp.Box.Transparency = 0.7
+                        esp.Text.Text = "คนดี"
+                        esp.Text.Color = Color3.fromRGB(255, 255, 255)
+                    end
+
+                    local headPos = Camera:WorldToViewportPoint(char.Head.Position + Vector3.new(0, 0.5, 0))
+                    local legPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
+                    local height = math.abs(headPos.Y - legPos.Y)
+                    local width = height / 2
+
+                    esp.Box.Size = Vector2.new(width, height)
+                    esp.Box.Position = Vector2.new(vector.X - width / 2, headPos.Y)
+                    esp.Text.Position = Vector2.new(vector.X, headPos.Y - (Config.ESPTextSize + 4))
+                else
+                    esp.Box.Visible = false
+                    esp.Text.Visible = false
+                end
+            else
+                esp.Box.Visible = false
+                esp.Text.Visible = false
+            end
+        end
+    end
+end)
+
+do
+    Tabs.GeneralFunc:AddParagraph({
+        Title = "ยินดีต้อนรับสู่เมนู ♣เนม555♣",
+        Content = "IG: DRAGON_12_6 | รับทำสคริปทุกรูปแบบ"
+    })
+
+    Tabs.GeneralFunc:AddToggle("InfiniteJumpToggle", {
+        Title = "กระโดดไม่จำกัด (ป้องกันการเตะ)",
+        Default = false
+    })
+    Options.InfiniteJumpToggle:OnChanged(function()
+        Config.InfiniteJump = Options.InfiniteJumpToggle.Value
+    end)
+
+    Tabs.GeneralFunc:AddToggle("NoWallToggle", {
+        Title = "เดินทะลุกำแพง 100%",
+        Default = false
+    })
+    Options.NoWallToggle:OnChanged(function()
+        Config.NoWall = Options.NoWallToggle.Value
+    end)
+
+    Tabs.GeneralFunc:AddSlider("WalkSpeedSlider", {
+        Title = "ความเร็วในการเดิน (0 - 1,200)",
+        Default = 16,
+        Min = 0,
+        Max = 1200,
+        Rounding = 0,
+        Callback = function(Value)
+            Config.WalkSpeed = Value
+        end
+    })
+
+    Tabs.GeneralFunc:AddToggle("CopyGamepassToggle", {
+        Title = "รับ Game Pass ฟรีทันที 100%",
+        Default = false
+    })
+    Options.CopyGamepassToggle:OnChanged(function()
+        Config.CopyGamepass = Options.CopyGamepassToggle.Value
+    end)
+
+    Tabs.Main:AddParagraph({
+        Title = "หน้าหลัก",
+        Content = "ควบคุมฟังก์ชันพื้นฐานทั่วไป"
+    })
+
+    -- -------------------------------------------------------------
+    -- เมนูที่ 3: MM2น้องเนมค้าบ
+    -- -------------------------------------------------------------
+    Tabs.MM2Name:AddParagraph({
+        Title = "MM2น้องเนมค้าบ (Special Edition)",
+        Content = "ฟังก์ชันพิเศษสำหรับ Murder Mystery 2 จัดทำโดย IG: DRAGON_12_6"
+    })
+
+    Tabs.MM2Name:AddToggle("FloatPullButtonToggle", {
+        Title = "เปิดปุ่มลอย 'ดึงฆาตกรยิง' (ขยับ/ลากได้)",
+        Default = false
+    })
+    Options.FloatPullButtonToggle:OnChanged(function()
+        Config.FloatPullButtonEnabled = Options.FloatPullButtonToggle.Value
+        FloatPullButton.Visible = Config.FloatPullButtonEnabled
+    end)
+
+    Tabs.MM2Name:AddSlider("FOVBoxSlider", {
+        Title = "ปรับมุมมอง FOV กล้อง (0 - 100)",
+        Default = 70,
+        Min = 0,
+        Max = 100,
+        Rounding = 0,
+        Callback = function(Value)
+            Config.FOVValue = Value
+        end
+    })
+
+    Tabs.MM2Name:AddToggle("ShowAimFOVToggle", {
+        Title = "แสดงวงกลม FOV ล็อกยิงกลางจอ",
+        Default = false
+    })
+    Options.ShowAimFOVToggle:OnChanged(function()
+        Config.ShowAimFOV = Options.ShowAimFOVToggle.Value
+    end)
+
+    Tabs.MM2Name:AddSlider("AimFOVSlider", {
+        Title = "ขนาดรัศมีวง FOV ล็อกยิง (0 - 300)",
+        Default = 150,
+        Min = 0,
+        Max = 300,
+        Rounding = 0,
+        Callback = function(Value)
+            Config.AimFOVRadius = Value
+        end
+    })
+
+    Tabs.MM2Name:AddToggle("ShootAirToMurderToggle", {
+        Title = "คลิกยิงอากาศดึงฆาตกร + ล็อกหัวยิง 100% ทันที",
+        Default = false
+    })
+    Options.ShootAirToMurderToggle:OnChanged(function()
+        Config.ShootAirToMurder = Options.ShootAirToMurderToggle.Value
+    end)
+
+    Tabs.MM2Name:AddToggle("KillerAutoSlashToggle", {
+        Title = "ฆาตกรออโต้ฟันใต้เท้า (100% สังหารในวงรัศมี)",
+        Default = false
+    })
+    Options.KillerAutoSlashToggle:OnChanged(function()
+        Config.KillerAutoSlash = Options.KillerAutoSlashToggle.Value
+    end)
+
+    Tabs.MM2Name:AddToggle("ShowKillerRadiusToggle", {
+        Title = "แสดงวงกลมใต้เท้าฆาตกร (สีแดง)",
+        Default = false
+    })
+    Options.ShowKillerRadiusToggle:OnChanged(function()
+        Config.ShowKillerRadius = Options.ShowKillerRadiusToggle.Value
+    end)
+
+    Tabs.MM2Name:AddSlider("KillerSlashRadiusSlider", {
+        Title = "ปรับรัศมีใต้เท้าฆาตกรออโต้ฟัน (0 - 100)",
+        Default = 25,
+        Min = 0,
+        Max = 100,
+        Rounding = 0,
+        Callback = function(Value)
+            Config.KillerSlashRadius = Value
+        end
+    })
+
+    Tabs.MM2Name:AddToggle("AutoPullGunToggle", {
+        Title = "ออโต้ดึงปืนเข้านายอำเภอเสียชีวิต",
+        Default = false
+    })
+    Options.AutoPullGunToggle:OnChanged(function()
+        Config.AutoPullGunOnSheriffDeath = Options.AutoPullGunToggle.Value
+    end)
+
+    Tabs.MM2Name:AddToggle("AntiExploitKickToggle", {
+        Title = "ป้องกันโดนโปรแกรมอื่นเตะออกจากแมพ",
+        Default = true
+    })
+    Options.AntiExploitKickToggle:OnChanged(function()
+        Config.AntiExploitKick = Options.AntiExploitKickToggle.Value
+    end)
+
+    Tabs.MM2Name:AddParagraph({
+        Title = "ระบบดีดผู้เล่นออก (พุ่งกระแทกทะลุกำแพง + กลับจุดเดิม 100%)",
+        Content = "กดปุ่มเพื่อพุ่งไปดีดบทบาทนั้นๆ หรือพิมพ์ชื่อเพื่อดีดรายบุคคลทันที"
+    })
+
+    Tabs.MM2Name:AddButton({
+        Title = "พุ่งดีดฆาตกรออกนอกห้องทันที (100%)",
+        Callback = function()
+            KickSpecificRole("Murderer")
+        end
+    })
+
+    Tabs.MM2Name:AddButton({
+        Title = "พุ่งดีดนายอำเภอออกนอกห้องทันที (100%)",
+        Callback = function()
+            KickSpecificRole("Sheriff")
+        end
+    })
+
+    Tabs.MM2Name:AddButton({
+        Title = "พุ่งดีดคนดี (ผู้บริสุทธิ์) ออกนอกห้องทันที (100%)",
+        Callback = function()
+            KickSpecificRole("Innocent")
+        end
+    })
+
+    Tabs.MM2Name:AddInput("KickPlayerInput", {
+        Title = "พิมพ์ชื่อเพื่อพุ่งดีดผู้เล่นรายบุคคล",
+        Default = "",
+        Placeholder = "ใส่ชื่อผู้เล่น...",
+        Finished = true,
+        Callback = function(Value)
+            Config.KickPlayerName = Value
+        end
+    })
+
+    Tabs.MM2Name:AddButton({
+        Title = "กดเพื่อพุ่งดีดผู้เล่นตามชื่อที่พิมพ์",
+        Callback = function()
+            KickPlayerByName(Config.KickPlayerName)
+        end
+    })
+
+    Tabs.MM2Name:AddToggle("MM2ESPToggle", {
+        Title = "MM2 ESP (ไอ้เลว / นายอำเภอ / คนดี)",
+        Default = false
+    })
+    Options.MM2ESPToggle:OnChanged(function()
+        Config.MM2ESP = Options.MM2ESPToggle.Value
+    end)
+
+    Tabs.MM2Name:AddSlider("ESPTextSizeSlider", {
+        Title = "ปรับขนาดฟอนต์ตัวหนังสือ ESP (0 - 20)",
+        Default = 14,
+        Min = 0,
+        Max = 20,
+        Rounding = 0,
+        Callback = function(Value)
+            Config.ESPTextSize = Value
+        end
+    })
+
+    Tabs.MM2Name:AddToggle("ShowRadiusCircleToggle", {
+        Title = "แสดงวงกลมรัศมีการโจมตี (สีเหลือง)",
+        Default = false
+    })
+    Options.ShowRadiusCircleToggle:OnChanged(function()
+        Config.ShowRadiusCircle = Options.ShowRadiusCircleToggle.Value
+    end)
+
+    Tabs.MM2Name:AddSlider("AttackRadiusSlider", {
+        Title = "รัศมีฟันอากาศโจมตีรอบตัว (0 - 50)",
+        Default = 15,
+        Min = 0,
+        Max = 50,
+        Rounding = 0,
+        Callback = function(Value)
+            Config.AttackRadius = Value
+        end
+    })
+
+    Tabs.MM2Name:AddToggle("FlyToMurderToggle", {
+        Title = "บินไปหาฆาตกรอย่างสมูท",
+        Default = false
+    })
+    Options.FlyToMurderToggle:OnChanged(function()
+        Config.FlyToMurder = Options.FlyToMurderToggle.Value
+    end)
+
+    Tabs.MM2Name:AddSlider("FlySpeedSlider", {
+        Title = "ความเร็วในการบินไปหาฆาตกร (0 - 100)",
+        Default = 3,
+        Min = 0,
+        Max = 100,
+        Rounding = 0,
+        Callback = function(Value)
+            Config.FlySpeed = Value
+        end
+    })
+end
+
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+InterfaceManager:SetFolder("FluentScriptHub")
+SaveManager:SetFolder("FluentScriptHub/specific-game")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+Window:SelectTab(1)
+
+Fluent:Notify({
+    Title = "แก้ไขระบบดีด & ยิงล็อกหัว 100%",
+    Content = "แก้ไขระบบดีดให้ทะลุกำแพงและกลับจุดเดิม 100% พร้อมระบบดึงฆาตกรกลางอากาศมารับกระสุนและล็อกหัวยิงอัตโนมัติเรียบร้อย!",
+    Duration = 6
+})
+
+SaveManager:LoadAutoloadConfig()
